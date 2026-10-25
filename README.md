@@ -72,7 +72,7 @@ Adopting it in your project: [docs/07-adoption-guide.md](docs/07-adoption-guide.
 
 ### Install the skills
 
-- **Claude Code:** `/plugin marketplace add <owner>/purpose-driven-development`, then
+- **Claude Code:** `/plugin marketplace add sethxcreations/purpose-driven-development`, then
   `/plugin install purpose-driven-development`. Or copy `skills/*` into your project's `.claude/skills/`.
 - **Any other agent:** copy `skills/` and point the agent at [AGENTS.md](AGENTS.md).
 
