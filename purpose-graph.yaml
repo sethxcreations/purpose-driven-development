@@ -1,0 +1,82 @@
+# This repository's own Purpose-to-Artifact Property Graph: PDD applied to PDD.
+# CI runs: python tools/pdd.py check --scan tools --require-tags --strict
+
+version: 1
+constitution: templates/constitution.yaml
+
+purposes:
+  - id: P-ADOPT-PDD
+    statement: Any software or product team can adopt Purpose-Driven Development with AI agents in a day, without new infrastructure.
+    stakeholders: [engineers, product managers, architects, AI coding agents]
+    success_measure: A team can model one feature, gate agent work on it, and enforce zero-orphan in CI.
+    status: active
+
+intents:
+  - id: I-GUIDE-AGENTS
+    statement: Agents can follow PDD procedures through installable skills.
+    refines: P-ADOPT-PDD
+  - id: I-ENFORCE
+    statement: Teams can verify the teleological laws automatically.
+    refines: P-ADOPT-PDD
+  - id: I-RESILIENCE
+    statement: Teams can bind to canonical resilience mechanisms instead of writing their own.
+    refines: P-ADOPT-PDD
+
+contracts:
+  - id: OC-SKILLS
+    summary: Every PDD mechanism has a SKILL.md an agent can load and follow.
+    operationalizes: I-GUIDE-AGENTS
+    agent: maintainers
+  - id: OC-CHECK-GRAPH
+    summary: Check a constitution and purpose graph against the zero-orphan, constitution-scope, and obstacle-centralization laws.
+    operationalizes: I-ENFORCE
+    agent: pdd CLI
+    req_post: [exit code is non-zero when any MUST-level law is violated]
+    verification: [tests/test_pdd.py]
+  - id: OC-GUARD-DIFF
+    summary: Flag reward-hacking signatures in a diff.
+    operationalizes: I-ENFORCE
+    agent: pdd CLI
+    verification: [tests/test_pdd.py::TestGuard]
+  - id: OC-HARNESSES
+    summary: Ship reference harnesses for the obstacles every service meets.
+    operationalizes: I-RESILIENCE
+    agent: maintainers
+  - id: OC-RES-DEPENDENCY-FAILURE
+    summary: Bounded retry and 480 B ring-buffer circuit breaker.
+    resolves: [X-DEPENDENCY-FAILURE]
+    agent: harness
+    constrained_by: [OPS-001, OPS-002, OPS-004]
+    verification: [tests/test_harnesses.py::TestCircuitBreaker]
+  - id: OC-RES-POISON-EVENT
+    summary: Partition-resilient consumer with dead-letter routing.
+    resolves: [X-POISON-EVENT]
+    agent: harness
+    constrained_by: [SEC-002, SEC-004, OPS-003]
+    verification: [tests/test_harnesses.py::TestPartitionConsumer]
+
+obstacles:
+  - id: X-DEPENDENCY-FAILURE
+    condition: A downstream dependency times out or fails repeatedly.
+    obstructs: [OC-HARNESSES]
+  - id: X-POISON-EVENT
+    condition: A malformed event reaches a partitioned consumer.
+    obstructs: [OC-HARNESSES]
+
+artifacts:
+  - id: A-SKILLS
+    stratum: block
+    path: skills
+    implements: [OC-SKILLS]
+  - id: A-HARNESS-CIRCUIT-BREAKER
+    stratum: workflow
+    path: harnesses/python/circuit_breaker.py
+    implements: [OC-RES-DEPENDENCY-FAILURE]
+  - id: A-HARNESS-PARTITION-CONSUMER
+    stratum: worker
+    path: harnesses/python/partition_consumer.py
+    implements: [OC-RES-POISON-EVENT]
+  - id: A-HARNESSES
+    stratum: block
+    path: harnesses
+    implements: [OC-HARNESSES]

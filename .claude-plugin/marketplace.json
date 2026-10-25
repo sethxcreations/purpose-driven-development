@@ -1,0 +1,11 @@
+{
+  "name": "purpose-driven-development",
+  "owner": {"name": "Vineet"},
+  "plugins": [
+    {
+      "name": "purpose-driven-development",
+      "source": "./",
+      "description": "Agent skills that keep every artifact traceable to a live purpose and governed by a software constitution."
+    }
+  ]
+}

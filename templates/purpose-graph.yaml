@@ -1,0 +1,71 @@
+# Purpose-to-Artifact Property Graph (PAPG) — tiers 2 to 5.
+#
+# Edges are written on the child node:
+#   intent.refines            -> purpose or parent intent   (AND/OR/XOR_REFINES, read upward as SATISFIES)
+#   contract.operationalizes  -> leaf intent                (OPERATIONALIZES)
+#   contract.constrained_by   -> constitution invariants    (CONSTRAINS)
+#   contract.resolves         -> obstacles                  (RESOLVES; makes it a resolution contract)
+#   obstacle.obstructs        -> contracts                  (OBSTRUCTS)
+#   artifact.implements       -> contracts                  (IMPLEMENTS)
+#   artifact.depends_on       -> artifacts                  (CONTAINS, BINDS_STATE, INVOKES_API,
+#                                                            TRIGGERS_WORKER, ORCHESTRATES, IMPORTS)
+#
+# Artifacts can also be declared in code with a comment tag, which `pdd check
+# --scan src` picks up:
+#   # pdd: implements OC-EXAMPLE-01 stratum=method
+#
+# Run: python tools/pdd.py check --graph purpose-graph.yaml
+
+version: 1
+constitution: constitution.yaml
+
+# Tier 2 — Strategic Purposes: the terminal WHY.
+purposes:
+  - id: P-EXAMPLE
+    statement: <Who gets what value, and how we will know.>
+    stakeholders: [<role>]
+    success_measure: <observable outcome>
+    status: active            # active | retired (retiring a purpose orphans its artifacts)
+
+# Tier 3 — Functional Intents: technology-agnostic capabilities.
+intents:
+  - id: I-EXAMPLE
+    statement: <The system can ... >
+    refines: P-EXAMPLE
+    refinement: AND           # AND: all siblings needed; OR: any sibling suffices; XOR: exactly one
+    entities: [<domain entity>]
+
+# Tier 4 — Operational Contracts and Obstacles.
+contracts:
+  - id: OC-EXAMPLE-01
+    summary: <one line>
+    operationalizes: I-EXAMPLE
+    agent: <service, worker, UI, or human role responsible>
+    dom_pre: <what is true in the domain before>
+    dom_post: <what is true in the domain after>
+    req_pre: [<condition the software must check before acting>]
+    req_post: [<condition the software must guarantee after>]
+    req_trig: [<event that obliges the operation>]
+    constrained_by: [SEC-003]
+    tools: []                 # agent tools allowlisted for this contract (AI-001)
+    verification: [<test ids or suite that proves req_post>]
+
+  - id: OC-RES-EXAMPLE
+    summary: <canonical mitigation>
+    resolves: [X-EXAMPLE]
+    agent: platform
+
+obstacles:
+  - id: X-EXAMPLE
+    condition: <assertion consistent with the domain that entails the contract's violation>
+    obstructs: [OC-EXAMPLE-01]
+    likelihood: medium
+
+# Tier 5 — Full-Stack Artifacts across the ten strata.
+artifacts:
+  - id: A-EXAMPLE
+    stratum: method           # block | screen | elem | state | api | worker | workflow | class | method | import
+    path: src/example.py
+    symbol: do_example
+    implements: [OC-EXAMPLE-01]
+    depends_on: []

@@ -1,0 +1,33 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install pyyaml jsonschema
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+      - name: PDD applied to this repository
+        run: python tools/pdd.py check --scan tools --require-tags --strict
+      - name: Worked example
+        run: python tools/pdd.py check --graph examples/checkout/purpose-graph.yaml --scan examples/checkout/src --require-tags --strict --specs examples/checkout/specs
+      - name: Reward-hacking guard
+        if: github.event_name == 'pull_request'
+        run: git diff "origin/${{ github.base_ref }}...HEAD" -- . ':!tests' ':!examples/checkout/reward-hack.diff' | python tools/pdd.py guard -

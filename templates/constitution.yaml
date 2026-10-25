@@ -1,0 +1,174 @@
+# Software Constitution — Tier 1 of the PDD taxonomy.
+#
+# Each invariant is the tuple <ID, CWE/Policy, Level, Constraint, Pattern, Rationale>.
+# Level follows RFC 2119: MUST (build fails), SHOULD (warning, needs a written
+# waiver), MAY (guidance). Version this file with semver; a MUST added or
+# tightened is a major change.
+#
+# Fields:
+#   id          Stable identifier: <AREA>-<NNN>. Areas used here: SEC, OPS, UI,
+#               API, DATA, ARCH, DEP, AI. Never reuse a retired id.
+#   policy      CWE id, standard, or internal policy reference.
+#   level       MUST | SHOULD | MAY
+#   constraint  One testable sentence.
+#   pattern     Optional machine check. `forbid` is a regex that must not match
+#               a line in files matching `paths`. Add `pdd: allow <ID>` on a line
+#               to waive it locally (reviewers see the waiver in the diff).
+#   harness     Optional canonical implementation agents must bind to instead
+#               of writing their own (see harnesses/).
+#   scope       `global`, or {strata: [...]} from: block, screen, elem, state,
+#               api, worker, workflow, class, method, import.
+#   rationale   Why this exists. The agent reads this to judge edge cases.
+
+version: 1.0.0
+owner: architecture-council
+invariants:
+
+  # ---- Security -----------------------------------------------------------
+  - id: SEC-001
+    policy: CWE-798
+    level: MUST
+    constraint: No credentials, tokens, or keys in source; read them from the secret manager at runtime.
+    pattern:
+      forbid: '(?i)(api[_-]?key|secret|password|token)\s*[:=]\s*["''][^"'']{8,}["'']'
+      paths: ["*"]
+    scope: global
+    rationale: Hardcoded secrets are among the most common post-deployment failures of AI-generated code.
+
+  - id: SEC-002
+    policy: CWE-89
+    level: MUST
+    constraint: All SQL uses parameterized queries or a query builder; never string concatenation or interpolation.
+    pattern:
+      forbid: '(?i)(execute|query|raw)\s*\(\s*f?["''].*(SELECT|INSERT|UPDATE|DELETE).*(\{|\+|%s?["'']\s*%)'
+      paths: ["*.py", "*.ts", "*.js", "*.go", "*.java", "*.rb"]
+    scope: {strata: [method, class, api, worker]}
+    rationale: SQL injection. Agents interpolate when "fixing" a query quickly.
+
+  - id: SEC-003
+    policy: CWE-285
+    level: MUST
+    constraint: Every API operation declares and enforces an RBAC permission before touching data.
+    scope: {strata: [api]}
+    rationale: Endpoint-per-screen generation routinely skips authorization.
+
+  - id: SEC-004
+    policy: CWE-20
+    level: MUST
+    constraint: All external input is validated against a schema at the boundary, once, by the shared validator.
+    scope: {strata: [api, worker]}
+    rationale: Centralized validation avoids scattered, inconsistent defensive checks.
+
+  # ---- Operations / resilience ----------------------------------------------
+  - id: OPS-001
+    policy: internal/resilience
+    level: MUST
+    constraint: No synchronous call to a remote service in a user-facing request path without a timeout and a fallback.
+    scope: {strata: [api, method, workflow]}
+    rationale: Blocking calls in the hot path cause cascading latency amplification.
+
+  - id: OPS-002
+    policy: internal/resilience
+    level: MUST
+    constraint: Retries, backoff, and fallbacks are provided only by the canonical resilience harness; no bespoke retry loops.
+    pattern:
+      forbid: '(?i)for\s+.*\b(retry|retries|attempt)\b|while\s+.*\b(retry|retries|attempt)\b'
+      paths: ["*.py", "*.ts", "*.js", "*.go", "*.java"]
+    harness: harnesses/python/circuit_breaker.py
+    scope: global
+    rationale: Law of Obstacle-Grounded Centralization. One mitigation per obstacle, implemented once.
+
+  - id: OPS-003
+    policy: internal/messaging
+    level: MUST
+    constraint: Message consumers use the partition-resilient consumer harness (idempotency key, bounded retries, dead-letter routing, offset advance).
+    harness: harnesses/python/partition_consumer.py
+    scope: {strata: [worker]}
+    rationale: A single poison event must not stall a whole partition.
+
+  - id: OPS-004
+    policy: internal/resilience
+    level: MUST
+    constraint: Circuit breakers use the fixed ring of 60 one-second buckets (two 4-byte counters each, 480 B per destination) with a 20-attempt minimum sample floor.
+    harness: harnesses/python/circuit_breaker.py
+    scope: {strata: [workflow]}
+    rationale: Timestamp deques grow with traffic and crash workers during retry storms; the ring is bounded.
+
+  - id: OPS-005
+    policy: internal/observability
+    level: MUST
+    constraint: Telemetry, logging, and tracing statements are never removed to make a build or test pass.
+    scope: global
+    rationale: Reward hacking during break-fix loops strips observability while corrupting production behaviour.
+
+  # ---- UI / state ------------------------------------------------------------
+  - id: UI-001
+    policy: internal/frontend
+    level: MUST
+    constraint: State flows one way from store to view; components never mutate state during render or touch the DOM imperatively.
+    scope: {strata: [state, screen, elem]}
+    rationale: Redundant flags and render-time mutation cause re-render loops and impossible states.
+
+  - id: UI-002
+    policy: internal/design-system
+    level: MUST
+    constraint: Styling uses design-system tokens and primitives; no inline style overrides of tokenized properties.
+    pattern:
+      forbid: 'style=\{\{[^}]*(color|margin|padding|font)'
+      paths: ["*.tsx", "*.jsx"]
+    scope: {strata: [screen, elem]}
+    rationale: Inline overrides bypass tokens and fork the design system.
+
+  - id: UI-003
+    policy: WCAG 2.2 AA
+    level: MUST
+    constraint: Every interactive element has an accessible name and keyboard path, inherited from the design-system primitive.
+    scope: {strata: [elem]}
+    rationale: Duplicated widgets lose accessibility and telemetry bindings.
+
+  - id: UI-004
+    policy: internal/frontend
+    level: SHOULD
+    constraint: Variants of a screen for role, viewport, or workflow stage are expressed as typed props or keyframes on one component, never as copied files.
+    pattern:
+      forbid: '(V2|Copy|New|Old|Temp)\.(tsx|jsx|vue|svelte)'
+      paths: ["*"]
+    scope: {strata: [screen]}
+    rationale: Cloned screens multiply the maintenance surface.
+
+  # ---- API / architecture / dependencies -----------------------------------
+  - id: API-001
+    policy: internal/api
+    level: SHOULD
+    constraint: Prefer extending an existing operation with query parameters or field projection over adding a new endpoint.
+    scope: {strata: [api]}
+    rationale: Endpoint proliferation expands the attack surface and drifts schemas.
+
+  - id: ARCH-001
+    policy: internal/architecture
+    level: SHOULD
+    constraint: Shared behaviour is expressed as an injected interface ("can-do"), not copied into concrete classes.
+    scope: {strata: [class]}
+    rationale: Duplicated business rules in concrete classes cannot be mocked or changed together.
+
+  - id: DEP-001
+    policy: internal/supply-chain
+    level: MUST
+    constraint: A new third-party dependency needs a Functional Intent that no existing dependency or standard library already serves, a license check, and a CVE check.
+    scope: {strata: [import]}
+    rationale: Pulling a whole library for one helper inflates images and adds license and exploit risk.
+
+  # ---- AI agents ---------------------------------------------------------
+  - id: AI-001
+    policy: internal/agent-safety
+    level: MUST
+    constraint: Agents call only tools allowlisted for the active Operational Contract, with arguments validated against schema before execution.
+    scope: global
+    rationale: Static guardrails are incomplete (Vassilev); runtime action guardrails are required.
+
+  - id: AI-002
+    policy: internal/agent-safety
+    level: MUST
+    constraint: Tests are never skipped, weakened, or fitted with hardcoded expected values to make an agent's change pass.
+    scope: global
+    rationale: Goodhart's Revenge — passing tests is a proxy, not the objective.

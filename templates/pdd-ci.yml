@@ -1,0 +1,46 @@
+# PDD trace gate for GitHub Actions. Copy to .github/workflows/pdd.yml in your project.
+# Adjust SRC and the spec directories. Start with ENFORCE_TAGS: "false" on legacy code.
+name: pdd
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  SRC: src
+  ENFORCE_TAGS: "true"
+
+jobs:
+  trace-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml
+
+      - name: Teleological laws (zero orphans, constitution scope, obstacle centralization)
+        run: |
+          flags=""
+          if [ "$ENFORCE_TAGS" = "true" ]; then flags="--require-tags"; fi
+          python tools/pdd.py check --graph purpose-graph.yaml --scan "$SRC" $flags
+
+      - name: Sealed specs unchanged
+        run: |
+          for d in specs/*/; do
+            [ -f "$d/.pdd-seal.json" ] && python tools/pdd.py check --graph purpose-graph.yaml --specs "$d"
+          done
+          true
+
+      - name: Reward-hacking guard on the PR diff
+        run: |
+          git diff "origin/${{ github.base_ref }}...HEAD" | python tools/pdd.py guard -
+
+      - name: KPIs
+        if: always()
+        run: python tools/pdd.py kpi --graph purpose-graph.yaml --scan "$SRC" >> "$GITHUB_STEP_SUMMARY"

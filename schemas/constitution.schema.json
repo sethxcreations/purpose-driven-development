@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purpose-driven-development/schemas/constitution.schema.json",
+  "title": "PDD Software Constitution",
+  "type": "object",
+  "required": ["version", "invariants"],
+  "properties": {
+    "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "owner": {"type": "string"},
+    "invariants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "level", "constraint", "rationale"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Z]+-\\d{3}$"},
+          "policy": {"type": "string"},
+          "level": {"enum": ["MUST", "SHOULD", "MAY"]},
+          "constraint": {"type": "string", "minLength": 10},
+          "pattern": {
+            "type": "object",
+            "properties": {
+              "forbid": {"type": "string"},
+              "paths": {"type": "array", "items": {"type": "string"}}
+            },
+            "additionalProperties": false
+          },
+          "harness": {"type": "string"},
+          "scope": {
+            "oneOf": [
+              {"const": "global"},
+              {
+                "type": "object",
+                "required": ["strata"],
+                "properties": {
+                  "strata": {
+                    "type": "array",
+                    "items": {"enum": ["block", "screen", "elem", "state", "api", "worker", "workflow", "class", "method", "import"]}
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
+          "rationale": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

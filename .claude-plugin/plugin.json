@@ -1,0 +1,8 @@
+{
+  "name": "purpose-driven-development",
+  "description": "Purpose-Driven Development (PDD) skills: constitution, purpose and contract modeling, spec cascade, reuse gate, trace gate, closeness mapping, debloating, resilience harnesses, runtime guardrails, teleological lens, and governance KPIs.",
+  "version": "0.1.0",
+  "author": {"name": "Vineet"},
+  "license": "MIT",
+  "keywords": ["purpose-driven-development", "pdd", "ai-agents", "traceability", "architecture", "kaos", "spec-driven"]
+}

@@ -1,0 +1,120 @@
+# Worked example: a checkout flow modeled end to end in PDD.
+# Run from the repo root:
+#   python tools/pdd.py check --graph examples/checkout/purpose-graph.yaml --scan examples/checkout/src --require-tags
+#   python tools/pdd.py lens  --graph examples/checkout/purpose-graph.yaml --scan examples/checkout/src src/payments/authorize.py
+
+version: 1
+constitution: ../../templates/constitution.yaml
+
+purposes:
+  - id: P-CHECKOUT
+    statement: Shoppers can pay for their cart quickly and safely, so completed orders grow without fraud losses growing.
+    stakeholders: [shopper, finance, support]
+    success_measure: Checkout conversion >= 62% with chargeback rate < 0.3%
+    status: active
+  - id: P-SPRING-PROMO
+    statement: Run the 2025 spring promotion banner.
+    stakeholders: [marketing]
+    success_measure: Campaign ended 2025-05-31
+    status: retired
+
+intents:
+  - id: I-PAY
+    statement: The system can take payment for a cart.
+    refines: P-CHECKOUT
+    refinement: AND
+    entities: [Cart, Payment]
+  - id: I-PAY-CARD
+    statement: The system can authorize a card payment.
+    refines: I-PAY
+    refinement: OR
+    entities: [Payment]
+  - id: I-PAY-WALLET
+    statement: The system can authorize a wallet payment.
+    refines: I-PAY
+    refinement: OR
+    entities: [Payment]
+  - id: I-CONFIRM
+    statement: The system can confirm a paid order to the shopper and to fulfilment.
+    refines: P-CHECKOUT
+    refinement: AND
+    entities: [Order]
+  - id: I-REVIEW-CART
+    statement: The shopper can review and edit the cart before paying.
+    refines: P-CHECKOUT
+    refinement: AND
+    entities: [Cart]
+
+contracts:
+  - id: OC-PAY-AUTH
+    summary: Authorize a card or wallet payment for a cart total.
+    operationalizes: [I-PAY-CARD, I-PAY-WALLET]
+    agent: payments-service
+    dom_pre: Cart is priced and locked.
+    dom_post: Exactly one payment authorization exists for the cart, or none and the cart is unlocked.
+    req_pre: [caller holds permission payments:authorize for the cart's account, amount equals locked cart total]
+    req_post: [authorization is idempotent per cart id, outcome is emitted as payment.authorized or payment.declined]
+    req_trig: [shopper submits payment]
+    constrained_by: [SEC-002, SEC-003, SEC-004, OPS-001, API-001]
+    tools: []
+    verification: [test_authorize_happy_path, test_authorize_idempotent, test_authorize_forbidden, test_authorize_psp_timeout]
+
+  - id: OC-ORDER-CONFIRM
+    summary: Turn an authorized payment into a confirmed order and notify fulfilment.
+    operationalizes: I-CONFIRM
+    agent: order-worker
+    dom_pre: payment.authorized event exists.
+    dom_post: One confirmed order per authorization; fulfilment has been notified once.
+    req_pre: [event schema is valid]
+    req_post: [order creation is idempotent per payment id, poison events are dead-lettered without stalling the partition]
+    req_trig: [payment.authorized]
+    constrained_by: [SEC-002, SEC-004, OPS-003]
+
+  - id: OC-CART-VIEW
+    summary: Show the cart with editable quantities and the payable total.
+    operationalizes: I-REVIEW-CART
+    agent: web-client
+    dom_pre: Cart exists.
+    dom_post: Displayed total equals server-priced total.
+    req_post: [state flows one way from store to view, all controls keyboard accessible]
+    constrained_by: [UI-001, UI-002, UI-003, UI-004]
+
+  # Resolution contracts: each obstacle is mitigated once, canonically.
+  - id: OC-RES-PSP-FAILURE
+    summary: Bounded retry plus ring-buffer circuit breaker in front of the payment provider.
+    resolves: [X-PSP-TIMEOUT]
+    agent: platform
+    constrained_by: [OPS-001, OPS-002, OPS-004]
+  - id: OC-RES-POISON-EVENT
+    summary: Partition-resilient consumer with dead-letter routing.
+    resolves: [X-POISON-EVENT]
+    agent: platform
+    constrained_by: [SEC-002, SEC-004, OPS-003]
+
+obstacles:
+  - id: X-PSP-TIMEOUT
+    condition: The payment provider does not answer within 2 s or returns 5xx.
+    obstructs: [OC-PAY-AUTH]
+    likelihood: high
+  - id: X-POISON-EVENT
+    condition: A payment.authorized event is malformed or references an unknown cart.
+    obstructs: [OC-ORDER-CONFIRM]
+    likelihood: medium
+
+artifacts:
+  # Declared here rather than by tag, to show both styles.
+  - id: A-CHECKOUT-STORE
+    stratum: state
+    path: src/ui/state/checkoutStore.ts
+    implements: [OC-CART-VIEW]
+  - id: A-CHECKOUT-SCREEN
+    stratum: screen
+    path: src/ui/CheckoutScreen.tsx
+    implements: [OC-CART-VIEW]
+    depends_on:
+      - {relation: BINDS_STATE, target: A-CHECKOUT-STORE}
+  # A shared constitutional harness can implement a resolution contract directly.
+  - id: A-POISON-HARNESS
+    stratum: worker
+    path: ../../harnesses/python/partition_consumer.py
+    implements: [OC-RES-POISON-EVENT]

@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://purpose-driven-development/schemas/purpose-graph.schema.json",
+  "title": "PDD Purpose-to-Artifact Property Graph",
+  "type": "object",
+  "required": ["version"],
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[A-Z][A-Z0-9_:./#-]*$"},
+    "ids": {"oneOf": [{"$ref": "#/$defs/id"}, {"type": "array", "items": {"$ref": "#/$defs/id"}}]},
+    "clauses": {"type": "array", "items": {"type": "string"}},
+    "stratum": {"enum": ["block", "screen", "elem", "state", "api", "worker", "workflow", "class", "method", "import"]}
+  },
+  "properties": {
+    "version": {"type": "integer"},
+    "constitution": {"type": "string"},
+    "purposes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "statement"],
+        "properties": {
+          "id": {"$ref": "#/$defs/id"},
+          "statement": {"type": "string"},
+          "stakeholders": {"type": "array", "items": {"type": "string"}},
+          "success_measure": {"type": "string"},
+          "status": {"enum": ["active", "retired"]}
+        }
+      }
+    },
+    "intents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "statement", "refines"],
+        "properties": {
+          "id": {"$ref": "#/$defs/id"},
+          "statement": {"type": "string"},
+          "refines": {"$ref": "#/$defs/ids"},
+          "refinement": {"enum": ["AND", "OR", "XOR"]},
+          "entities": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "contracts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "anyOf": [{"required": ["operationalizes"]}, {"required": ["resolves"]}],
+        "properties": {
+          "id": {"$ref": "#/$defs/id"},
+          "summary": {"type": "string"},
+          "operationalizes": {"$ref": "#/$defs/ids"},
+          "resolves": {"$ref": "#/$defs/ids"},
+          "agent": {"type": "string"},
+          "dom_pre": {"type": "string"},
+          "dom_post": {"type": "string"},
+          "req_pre": {"$ref": "#/$defs/clauses"},
+          "req_post": {"$ref": "#/$defs/clauses"},
+          "req_trig": {"$ref": "#/$defs/clauses"},
+          "constrained_by": {"$ref": "#/$defs/ids"},
+          "tools": {"type": "array", "items": {"type": "string"}},
+          "verification": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "obstacles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "condition", "obstructs"],
+        "properties": {
+          "id": {"$ref": "#/$defs/id"},
+          "condition": {"type": "string"},
+          "obstructs": {"$ref": "#/$defs/ids"},
+          "likelihood": {"enum": ["low", "medium", "high"]}
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "stratum", "implements"],
+        "properties": {
+          "id": {"$ref": "#/$defs/id"},
+          "stratum": {"$ref": "#/$defs/stratum"},
+          "path": {"type": "string"},
+          "symbol": {"type": "string"},
+          "implements": {"type": "array", "items": {"$ref": "#/$defs/id"}},
+          "depends_on": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["relation", "target"],
+              "properties": {
+                "relation": {"enum": ["CONTAINS", "BINDS_STATE", "INVOKES_API", "TRIGGERS_WORKER", "ORCHESTRATES", "IMPORTS"]},
+                "target": {"$ref": "#/$defs/id"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
